@@ -1,0 +1,60 @@
+import socket
+import os
+import time
+import threading
+import httpx
+import json
+
+pwd = "/home/jamie/funcx_virtines_sum23/firecracker"
+api_socket = f"{pwd}/firecracker.socket"
+logfile = f"{pwd}/firecracker.log"
+
+kernel = f"{pwd}/ub_vmlinux.bin"
+kernel_boot_args="console=ttyS0 reboot=k panic=1 pci=off"
+
+rootfs = f"{pwd}/ubuntu.ext4"
+fc_mac = "06:00:AC:10:00:02"
+tap_dev="tap0"
+
+ip = "172.16.0.2" # ubuntu ip
+# ip = "10.0.0.2" # alpine ip
+port = 20001
+
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+transport = httpx.HTTPTransport(uds=api_socket)
+client = httpx.Client(transport=transport)
+stay_alive = True
+
+def query():
+    while stay_alive:
+        s.sendto(b"hello", (ip, port))
+        time.sleep(1)
+
+t = threading.Thread(target=query)
+t.start()
+
+os.system(f"touch {logfile}") 
+os.system("echo 3 > /proc/sys/vm/drop_caches") # empty out buffer cache
+
+data_startlog = {"log_path": logfile, "level": "Debug", "show_level": True, "show_log_origin": True}
+data_addbootsource = {"kernel_image_path": kernel, "boot_args": kernel_boot_args}
+data_setrootfs = {"drive_id": "rootfs", "path_on_host": rootfs, "is_root_device": True, "is_read_only": False}
+data_setupnet = {"iface_id": "net1", "guest_mac": fc_mac, "host_dev_name": tap_dev}
+data_startinstance = {"action_type": "InstanceStart"}
+
+start = time.time()
+
+# os.system("bash ./ub_launch.sh") # replace this with requests
+client.put("http://localhost/logger", content=json.dumps(data_startlog).encode())
+client.put("http://localhost/boot-source", content=json.dumps(data_addbootsource).encode())
+client.put("http://localhost/drives/rootfs", content=json.dumps(data_setrootfs).encode())
+client.put("http://localhost/network-interfaces/net1", content=json.dumps(data_setupnet).encode())
+time.sleep(0.015)
+client.put("http://localhost/actions", content=json.dumps(data_startinstance).encode())
+
+data, addr = s.recvfrom(1024)
+stay_alive = False
+end = float(data)
+
+print(end - start - 2*0.015)
+s.close()
