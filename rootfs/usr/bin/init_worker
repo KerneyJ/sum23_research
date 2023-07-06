@@ -1,8 +1,9 @@
 #!/bin/bash
 
+VM=$(ip -o link show eth0 | awk '{print $(NF-2)}' | rev | cut -c 1-2 | rev)
 ip route flush dev eth0
-ip addr add 10.0.0.2/24 dev eth0
+ip addr add 10.0.$VM.2/24 dev eth0
 ip link set eth0 up
-ip route add 0.0.0.0/0 via 10.0.0.1
+ip route add 0.0.0.0/0 via 10.0.$VM.1
 
 /parsl/env/bin/python3 /parsl/worker.py
