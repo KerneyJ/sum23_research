@@ -4,10 +4,11 @@ boottime = time.time()
 
 import socket
 import os
+import sys
 import pickle
 import traceback
 
-ip="10.0.0.2"
+ip="10.0.{}.2".format(sys.argv[1])
 port=20001
 
 client_sock = None
@@ -38,15 +39,8 @@ try:
 
         code = "{0} = {1}(*{2}, **{3})".format(resultname, fname,
                                                argname, kwargname)
-        ret = None
-        try:
-            # ret = "It worked"
-            ret = f(*args, **kwargs)
-            # exec("{} = {}".format(resultname, kwargs), user_ns, user_ns)
-            # exec(code, user_ns, user_ns) # parsl_result = 1 + 2 for testing
-        except Exception as e:
-            ret = str(e)
-        return ret # user_ns.get(resultname)
+        exec(code, user_ns, user_ns) # parsl_result = 1 + 2 for testing
+        return user_ns.get(resultname)
 
     def connect_timeout(socket, addr, timeout=10):
         start = time.time()
