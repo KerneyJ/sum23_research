@@ -1,12 +1,14 @@
 #!/bin/bash
 
-API_SOCKET="./firecracker.socket"
-LOGFILE="./firecracker.log"
+WORKER=0
+API_SOCKET="./fc-logs/firecracker-worker${WORKER}.socket"
+LOGFILE="./fc-logs/firecracker-worker${WORKER}.log"
+HOST_TAP_DEV="tapvm${WORKER}"
+AP_MAC="AA:FC:00:00:00:0${WORKER}"
 KERNEL=$1
 ROOTFS=$2
 ARCH=$(uname -m)
-UB_MAC="06:00:AC:10:00:02"
-AP_MAC="AA:FC:00:00:00:01"
+
 touch $LOGFILE
 echo $KERNEL
 echo $ROOTFS
@@ -45,7 +47,7 @@ curl --unix-socket ${API_SOCKET} \
     -d "{
       \"iface_id\": \"eth0\",
       \"guest_mac\": \"${AP_MAC}\",
-      \"host_dev_name\": \"tapvm1\"
+      \"host_dev_name\": \"${HOST_TAP_DEV}\"
     }"
 
 sleep 0.015
