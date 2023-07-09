@@ -2,6 +2,7 @@ import time
 # boottime = time.clock_gettime(time.CLOCK_BOOTTIME)
 boottime = time.time()
 
+import zmq
 import socket
 import os
 import sys
@@ -11,11 +12,10 @@ import traceback
 ip="10.0.{}.2".format(sys.argv[1])
 port=20001
 
-client_sock = None
-server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-result_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_sock.bind((ip, port))
-server_sock.listen()
+context = zmq.Context()
+task_sock = context.socket(zmq.REP)
+result_sock = context.socket(zmq.REQ)
+task_sock.bind("tcp://{}:{}".format(ip,port))
 
 # Parsl worker Loop
 try:
@@ -54,22 +54,17 @@ try:
         return connected
 
     ready_time = time.time()
-    client_sock, address = server_sock.accept()
-    # res = client_sock.recv(1024)
-    # result_socket_addr = pickle.loads(res)
-    # raise Exception("Received result socket addr {}".format(result_socket_addr))
-    # if not connect_timeout(result_sock, result_socket_addr):
-    #     raise Exception("Worker was unable to connect to result socket")
-    client_sock.sendall("ready to receive work:{}; boot time:{}".format(ready_time, boottime).encode())
-    msg = client_sock.recv(1024)
-    result_sock_address = pickle.loads(msg)
-    result_sock.connect(result_sock_address)
+    result_addr = task_sock.recv()
+    result_sock.connect(result_addr.decode())
+    task_sock.send("worker {} ready to receive work: {}; boot time: {}".format(sys.argv[1], ready_time, boottime).encode())
+    result_sock.send(b"connected to result socket")
+    ack = result_sock.recv()
     while True:
-        reqbuf = client_sock.recv(2 ** 20)
+        reqbuf = task_sock.recv()
         req = pickle.loads(reqbuf)
         tid = req["task_id"]
         buf = req["buffer"]
-        client_sock.sendall("Received task {}; buff length {} and buf {}".format(tid, len(reqbuf), req).encode())
+        task_sock.send("Worker: {} received task {}; buff length {}".format(ip, tid, len(reqbuf)).encode())
         if reqbuf == b"STOP":
             client_sock.sendall(b"terminating")
             client_sock.close()
@@ -80,16 +75,16 @@ try:
         # In future surround the below in seperate try catches like process_worker_pool.py
         
         result = execute_task(buf)
+        print("Executed task {}".format(tid))
         serialized_result = serialize(result, buffer_threshold=1000000)
         result_package = {'type': 'result', 'task_id': tid, 'result': serialized_result}
         res = pickle.dumps(result_package)
-        #res = "Execute task: {}".format(result).encode()
-        result_sock.sendall(res)
+        result_sock.send(res)
+        ack = result_sock.recv()
 except Exception as e:
     msg = "DEAD: {} \ntraceback: {}".format(str(e), traceback.format_exc())
-    result_sock.sendall(msg.encode())
-    client_sock.sendall(msg.encode())
-    server_sock.close()
-    if client_sock:
-        client_sock.close()
+    result_sock.send(msg.encode())
+    result_sock.close()
+    if task_sock:
+        task_sock.close()
     os.system("reboot")
