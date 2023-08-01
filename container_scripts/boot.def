@@ -1,0 +1,9 @@
+Bootstrap: docker
+From: python:3.10-alpine
+
+%files
+    /home/jamie/funcx_virtines_sum23/singularity/app/worker.py /opt
+
+%post
+    apk add gcc musl-dev linux-headers
+    pip install parsl
